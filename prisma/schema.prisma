@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Phase 1: Auth ───
+
+model Profile {
+  id          String   @id @db.Uuid
+  phone       String   @unique
+  name        String?
+  handle      String   @unique
+  city        String?
+  avatarUrl   String?  @map("avatar_url")
+  plan        String   @default("free")
+  status      String   @default("active")
+  referralCode String? @unique @map("referral_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("profiles")
+}
+
+// ─── Phase 2: Rooms ───
+
+model Room {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String
+  category           String
+  city               String?
+  isSeed             Boolean  @default(false) @map("is_seed")
+  lastMessagePreview String?  @map("last_message_preview")
+  lastActivityAt     DateTime @default(now()) @map("last_activity_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  members  RoomMember[]
+  messages Message[]
+
+  @@map("rooms")
+}
+
+model RoomMember {
+  roomId   String   @map("room_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, userId])
+  @@map("room_members")
+}
+
+// ─── Phase 3: Messages & Reactions ───
+
+model Message {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  roomId    String   @map("room_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  content   String
+  type      String   @default("user")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  room      Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  reactions Reaction[]
+
+  @@index([roomId, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+model Reaction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("reactions")
+}
+
+// ─── Phase 4: Direct Messages ───
+
+model DmThread {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user1Id   String   @map("user1_id") @db.Uuid
+  user2Id   String   @map("user2_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  messages DmMessage[]
+
+  @@unique([user1Id, user2Id])
+  @@map("dm_threads")
+}
+
+model DmMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId  String   @map("thread_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread DmThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt(sort: Desc)])
+  @@map("dm_messages")
+}
+
+model Block {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([blockerId, blockedId])
+  @@map("blocks")
+}
+
+// ─── Phase 5: Calls & Limits ───
+
+model Call {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  callerId        String    @map("caller_id") @db.Uuid
+  calleeId        String    @map("callee_id") @db.Uuid
+  originType      String?   @map("origin_type")
+  originId        String?   @map("origin_id") @db.Uuid
+  status          String    @default("pending")
+  durationSeconds Int?      @map("duration_seconds")
+  startedAt       DateTime? @map("started_at")
+  endedAt         DateTime? @map("ended_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  ratings CallRating[]
+
+  @@map("calls")
+}
+
+model CallRating {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  callId    String   @map("call_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  rating    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("call_ratings")
+}
+
+model DailyLimit {
+  userId  String   @map("user_id") @db.Uuid
+  feature String
+  date    DateTime @db.Date
+  count   Int      @default(0)
+
+  @@id([userId, feature, date])
+  @@map("daily_limits")
+}
+
+// ─── Phase 6: Mood Matching ───
+
+model MoodQueue {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  mood      String
+  enteredAt DateTime @default(now()) @map("entered_at")
+
+  @@map("mood_queue")
+}
+
+model MoodMatch {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user1Id   String   @map("user1_id") @db.Uuid
+  user2Id   String   @map("user2_id") @db.Uuid
+  mood      String
+  callId    String?  @map("call_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("mood_matches")
+}
+
+// ─── Phase 7: Contacts & Referrals ───
+
+model SavedContact {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  contactId String   @map("contact_id") @db.Uuid
+  isMutual  Boolean  @default(false) @map("is_mutual")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, contactId])
+  @@map("saved_contacts")
+}
+
+model Referral {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  referrerId String    @map("referrer_id") @db.Uuid
+  referredId String?   @map("referred_id") @db.Uuid
+  code       String    @unique
+  status     String    @default("pending")
+  rewardedAt DateTime? @map("rewarded_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@map("referrals")
+}
+
+// ─── Phase 8: Reports & Moderation ───
+
+model Report {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterId     String   @map("reporter_id") @db.Uuid
+  reportedUserId String   @map("reported_user_id") @db.Uuid
+  reason         String
+  context        String?
+  contextType    String?  @map("context_type")
+  contextId      String?  @map("context_id") @db.Uuid
+  status         String   @default("pending")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("reports")
+}
+
+model UserPenalty {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  offenseCount Int       @default(1) @map("offense_count")
+  penaltyType  String    @map("penalty_type")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@map("user_penalties")
+}
