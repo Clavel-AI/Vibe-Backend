@@ -8,13 +8,13 @@ interface SetupProfileInput {
   city?: string;
 }
 
-export async function setupProfile(input: SetupProfileInput) {
+export async function setupProfile(input: SetupProfileInput): Promise<{ profile: Awaited<ReturnType<typeof prisma.profile.findUnique>>; isNew: boolean }> {
   const existing = await prisma.profile.findUnique({
     where: { id: input.userId },
   });
 
   if (existing) {
-    return existing;
+    return { profile: existing, isNew: false };
   }
 
   // Generate unique handle (retry if collision)
@@ -40,7 +40,7 @@ export async function setupProfile(input: SetupProfileInput) {
     },
   });
 
-  return profile;
+  return { profile, isNew: true };
 }
 
 export async function getProfile(userId: string) {

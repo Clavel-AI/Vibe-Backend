@@ -7,14 +7,20 @@ export async function setupProfile(req: AuthRequest, res: Response) {
     const userId = req.userId!;
     const { phone, name, city } = req.body;
 
-    const profile = await authService.setupProfile({
+    const { profile, isNew } = await authService.setupProfile({
       userId,
       phone,
       name,
       city,
     });
 
-    res.status(200).json({ profile });
+    if (isNew) {
+      // 201 → frontend routes new user to name-setup
+      res.status(201).json({ profile });
+    } else {
+      // 409 → frontend routes returning user directly to tabs
+      res.status(409).json({ profile, error: "Profile already exists" });
+    }
   } catch (err) {
     console.error("[Auth] Setup profile error:", err);
     res.status(500).json({ error: "Failed to setup profile" });
