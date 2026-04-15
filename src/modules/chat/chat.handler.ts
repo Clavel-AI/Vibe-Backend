@@ -9,7 +9,7 @@ const RATE_LIMIT_MS = 1000; // 1 message per second
 export function registerChatHandlers(io: Server, socket: AuthenticatedSocket) {
   const userId = socket.userId!;
 
-  socket.on("room:message", async ({ roomId, content }: { roomId: string; content: string }) => {
+  socket.on("room:message", async ({ roomId, content, replyToId }: { roomId: string; content: string; replyToId?: string }) => {
     // Validate
     if (!roomId || !content?.trim()) return;
     if (content.trim().length > 500) return;
@@ -28,10 +28,19 @@ export function registerChatHandlers(io: Server, socket: AuthenticatedSocket) {
         roomId,
         senderId: userId,
         content: content.trim(),
+        replyToId,
       });
 
-      // Broadcast to everyone in the room (including sender)
+      // Broadcast message to everyone in the room (including sender)
       io.to(`room:${roomId}`).emit("room:message:new", message);
+
+      // Notify ALL connected clients so the room bubbles up in their list
+      io.emit("rooms:activity", {
+        roomId,
+        lastActivityAt: message.createdAt.toISOString(),
+        lastMessagePreview: content.trim().substring(0, 60),
+        activityStatus: "active",
+      });
     } catch (err) {
       console.error("[Chat] Message error:", err);
       socket.emit("room:error", { message: "Failed to send message" });
@@ -42,18 +51,21 @@ export function registerChatHandlers(io: Server, socket: AuthenticatedSocket) {
     if (!messageId || !emoji) return;
 
     try {
-      await chatService.toggleReaction(messageId, userId, emoji);
-      const reactions = await chatService.getReactionSummary(messageId, userId);
-
-      // Broadcast updated reactions to the room — we need the roomId
-      // Get it from the message
       const { prisma } = await import("../../config/database");
-      const msg = await prisma.message.findUnique({ where: { id: messageId }, select: { roomId: true } });
+
+      await chatService.toggleReaction(messageId, userId, emoji);
+
+      // Fetch the roomId and raw reactions in parallel
+      const [msg, rawReactions] = await Promise.all([
+        prisma.message.findUnique({ where: { id: messageId }, select: { roomId: true } }),
+        prisma.reaction.findMany({ where: { messageId }, select: { userId: true, emoji: true } }),
+      ]);
       if (!msg) return;
 
+      // Send raw reactions so each client computes myReaction from their own userId
       io.to(`room:${msg.roomId}`).emit("room:reaction:update", {
         messageId,
-        reactions,
+        reactions: rawReactions,
       });
     } catch (err) {
       console.error("[Chat] Reaction error:", err);

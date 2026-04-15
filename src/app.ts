@@ -8,6 +8,9 @@ import { prisma } from "./config/database";
 import { setupSocketIO } from "./socket";
 import authRoutes from "./modules/auth/auth.routes";
 import roomRoutes from "./modules/rooms/rooms.routes";
+import dmRoutes from "./modules/dm/dm.routes";
+import * as dmController from "./modules/dm/dm.controller";
+import { authMiddleware } from "./middleware/auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -26,9 +29,13 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 
 app.use("/api/rooms", roomRoutes);
+app.use("/api/dm", dmRoutes);
+
+// Block / unblock users
+app.post("/api/users/:id/block",   authMiddleware, dmController.blockUser);
+app.delete("/api/users/:id/block", authMiddleware, dmController.unblockUser);
 
 // Future phases:
-// app.use("/api/dm", dmRoutes);
 // app.use("/api/calls", callRoutes);
 // app.use("/api/mood", moodRoutes);
 // app.use("/api/contacts", contactRoutes);

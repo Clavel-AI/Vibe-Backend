@@ -3,6 +3,7 @@ import { Server, Socket } from "socket.io";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "../config/env";
 import { registerChatHandlers } from "../modules/chat/chat.handler";
+import { registerDmHandlers } from "../modules/dm/dm.handler";
 
 const supabaseAdmin = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -67,7 +68,8 @@ export function setupSocketIO(httpServer: HttpServer): Server {
       if (!roomMembers.has(roomId)) roomMembers.set(roomId, new Set());
       roomMembers.get(roomId)!.add(userId);
       const count = getRoomMemberCount(roomId);
-      io.to(`room:${roomId}`).emit("room:count", { roomId, count });
+      // Broadcast to ALL clients so the home screen list updates in real-time
+      io.emit("room:count", { roomId, count });
     });
 
     // room:leave = user closed the room screen (real-time presence only)
@@ -75,7 +77,7 @@ export function setupSocketIO(httpServer: HttpServer): Server {
       socket.leave(`room:${roomId}`);
       roomMembers.get(roomId)?.delete(userId);
       const count = getRoomMemberCount(roomId);
-      io.to(`room:${roomId}`).emit("room:count", { roomId, count });
+      io.emit("room:count", { roomId, count });
     });
 
     socket.on("disconnect", () => {
@@ -83,7 +85,7 @@ export function setupSocketIO(httpServer: HttpServer): Server {
         if (members.has(userId)) {
           members.delete(userId);
           const count = members.size;
-          io.to(`room:${roomId}`).emit("room:count", { roomId, count });
+          io.emit("room:count", { roomId, count });
         }
       });
       console.log(`[Socket] Disconnected: ${userId}`);
@@ -91,6 +93,9 @@ export function setupSocketIO(httpServer: HttpServer): Server {
 
     // ─── Phase 3: Chat ───
     registerChatHandlers(io, socket);
+
+    // ─── Phase 4: Direct Messages ───
+    registerDmHandlers(io, socket);
 
     // ─── Phase 5: Call signaling ───
     // ─── Phase 6: Mood matching ───

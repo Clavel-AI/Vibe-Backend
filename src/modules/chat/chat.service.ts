@@ -1,5 +1,11 @@
 import { prisma } from "../../config/database";
 
+export interface ReplyPreview {
+  id: string;
+  content: string;
+  sender: { id: string; name: string | null; handle: string; avatarUrl: string | null } | null;
+}
+
 export interface MessageWithMeta {
   id: string;
   content: string;
@@ -14,6 +20,7 @@ export interface MessageWithMeta {
     avatarUrl: string | null;
   } | null;
   reactions: { emoji: string; count: number; myReaction: boolean }[];
+  replyTo: ReplyPreview | null;
 }
 
 export async function getRoomMessages(
@@ -31,14 +38,18 @@ export async function getRoomMessages(
     take: limit + 1,
     include: {
       reactions: { select: { userId: true, emoji: true } },
+      replyTo: { select: { id: true, content: true, senderId: true } },
     },
   });
 
   const hasMore = messages.length > limit;
   const page = hasMore ? messages.slice(0, limit) : messages;
 
-  // Fetch sender profiles
-  const senderIds = [...new Set(page.map((m) => m.senderId))];
+  // Collect all profile IDs: message senders + reply-to senders
+  const senderIds = [...new Set([
+    ...page.map((m) => m.senderId),
+    ...page.filter((m) => m.replyTo).map((m) => m.replyTo!.senderId),
+  ])];
   const profiles = await prisma.profile.findMany({
     where: { id: { in: senderIds } },
     select: { id: true, name: true, handle: true, avatarUrl: true },
@@ -67,6 +78,9 @@ export async function getRoomMessages(
         count: val.count,
         myReaction: val.myReaction,
       })),
+      replyTo: msg.replyTo
+        ? { id: msg.replyTo.id, content: msg.replyTo.content, sender: profileMap[msg.replyTo.senderId] ?? null }
+        : null,
     };
   });
 
@@ -81,6 +95,7 @@ export async function createMessage(data: {
   senderId: string;
   content: string;
   type?: string;
+  replyToId?: string;
 }): Promise<MessageWithMeta> {
   const msg = await prisma.message.create({
     data: {
@@ -88,6 +103,7 @@ export async function createMessage(data: {
       senderId: data.senderId,
       content: data.content,
       type: data.type ?? "user",
+      ...(data.replyToId ? { replyToId: data.replyToId } : {}),
     },
   });
 
@@ -108,6 +124,21 @@ export async function createMessage(data: {
           select: { id: true, name: true, handle: true, avatarUrl: true },
         });
 
+  let replyTo: ReplyPreview | null = null;
+  if (data.replyToId) {
+    const replied = await prisma.message.findUnique({
+      where: { id: data.replyToId },
+      select: { id: true, content: true, senderId: true },
+    });
+    if (replied) {
+      const replySender = await prisma.profile.findUnique({
+        where: { id: replied.senderId },
+        select: { id: true, name: true, handle: true, avatarUrl: true },
+      });
+      replyTo = { id: replied.id, content: replied.content, sender: replySender ?? null };
+    }
+  }
+
   return {
     id: msg.id,
     content: msg.content,
@@ -117,6 +148,7 @@ export async function createMessage(data: {
     senderId: msg.senderId,
     sender: sender ?? null,
     reactions: [],
+    replyTo,
   };
 }
 
@@ -125,19 +157,27 @@ export async function toggleReaction(
   userId: string,
   emoji: string
 ): Promise<{ added: boolean }> {
-  const existing = await prisma.reaction.findUnique({
-    where: { messageId_userId_emoji: { messageId, userId, emoji } },
+  // One reaction per user per message — find any existing reaction by this user
+  const existing = await prisma.reaction.findFirst({
+    where: { messageId, userId },
   });
 
   if (existing) {
+    // Always remove the old reaction first
     await prisma.reaction.delete({
-      where: { messageId_userId_emoji: { messageId, userId, emoji } },
+      where: { messageId_userId_emoji: { messageId, userId, emoji: existing.emoji } },
     });
-    return { added: false };
-  } else {
+    if (existing.emoji === emoji) {
+      // Same emoji tapped again → toggled off
+      return { added: false };
+    }
+    // Different emoji → replace with new one
     await prisma.reaction.create({ data: { messageId, userId, emoji } });
     return { added: true };
   }
+
+  await prisma.reaction.create({ data: { messageId, userId, emoji } });
+  return { added: true };
 }
 
 export async function getReactionSummary(

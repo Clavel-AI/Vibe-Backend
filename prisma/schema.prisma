@@ -60,10 +60,13 @@ model Message {
   senderId  String   @map("sender_id") @db.Uuid
   content   String
   type      String   @default("user")
+  replyToId String?  @map("reply_to_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
   room      Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   reactions Reaction[]
+  replyTo   Message?   @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]  @relation("MessageReplies")
 
   @@index([roomId, createdAt(sort: Desc)])
   @@map("messages")
@@ -101,12 +104,29 @@ model DmMessage {
   threadId  String   @map("thread_id") @db.Uuid
   senderId  String   @map("sender_id") @db.Uuid
   content   String
+  replyToId String?  @map("reply_to_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
-  thread DmThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  thread    DmThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  reactions DmReaction[]
+  replyTo   DmMessage?    @relation("DmMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   DmMessage[]   @relation("DmMessageReplies")
 
   @@index([threadId, createdAt(sort: Desc)])
   @@map("dm_messages")
+}
+
+model DmReaction {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message DmMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("dm_reactions")
 }
 
 model Block {
