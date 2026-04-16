@@ -9,16 +9,19 @@ datasource db {
 // ─── Phase 1: Auth ───
 
 model Profile {
-  id          String   @id @db.Uuid
-  phone       String   @unique
-  name        String?
-  handle      String   @unique
-  city        String?
-  avatarUrl   String?  @map("avatar_url")
-  plan        String   @default("free")
-  status      String   @default("active")
-  referralCode String? @unique @map("referral_code")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String    @id @db.Uuid
+  phone        String    @unique
+  name         String?
+  handle       String    @unique
+  city         String?
+  avatarUrl    String?   @map("avatar_url")
+  plan         String    @default("free")
+  status       String    @default("active")
+  referralCode String?   @unique @map("referral_code")
+  gender       String?
+  dob          DateTime?
+  avatarConfig Json?     @map("avatar_config")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   @@map("profiles")
 }

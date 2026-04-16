@@ -13,7 +13,10 @@ const setupProfileSchema = z.object({
 });
 
 const updateProfileSchema = z.object({
-  name: z.string().max(20).min(1),
+  name: z.string().max(20).min(1).optional(),
+  gender: z.enum(["male", "female", "other"]).optional(),
+  dob: z.string().optional(),
+  avatarConfig: z.any().optional(),
 });
 
 // POST /api/auth/setup-profile — called after Supabase OTP verification

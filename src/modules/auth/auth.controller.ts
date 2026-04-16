@@ -43,8 +43,8 @@ export async function getProfile(req: AuthRequest, res: Response) {
 
 export async function updateProfile(req: AuthRequest, res: Response) {
   try {
-    const { name } = req.body;
-    const profile = await authService.updateProfile(req.userId!, { name });
+    const { name, gender, dob, avatarConfig } = req.body;
+    const profile = await authService.updateProfile(req.userId!, { name, gender, dob, avatarConfig });
     res.json({ profile });
   } catch (err) {
     console.error("[Auth] Update profile error:", err);

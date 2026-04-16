@@ -49,9 +49,17 @@ export async function getProfile(userId: string) {
   });
 }
 
-export async function updateProfile(userId: string, data: { name?: string }) {
+export async function updateProfile(
+  userId: string,
+  data: { name?: string; gender?: string; dob?: string; avatarConfig?: object }
+) {
   return prisma.profile.update({
     where: { id: userId },
-    data,
+    data: {
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.gender !== undefined && { gender: data.gender }),
+      ...(data.dob !== undefined && { dob: new Date(data.dob) }),
+      ...(data.avatarConfig !== undefined && { avatarConfig: data.avatarConfig }),
+    },
   });
 }

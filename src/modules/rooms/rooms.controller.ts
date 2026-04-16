@@ -103,12 +103,26 @@ export async function getRoomMessages(req: AuthRequest, res: Response) {
 export async function getRoomMembersHandler(req: AuthRequest, res: Response) {
   try {
     const id = req.params.id as string;
-    const onlineIds = [...getRoomMembers(id)];
+    const onlineSet = getRoomMembers(id);
+
+    // All persistent members of this room
+    const roomMemberRecords = await prisma.roomMember.findMany({
+      where: { roomId: id },
+      select: { userId: true },
+    });
+    const userIds = roomMemberRecords.map((r) => r.userId);
+
     const profiles = await prisma.profile.findMany({
-      where: { id: { in: onlineIds } },
+      where: { id: { in: userIds } },
       select: { id: true, name: true, handle: true, avatarUrl: true },
     });
-    res.json({ members: profiles });
+
+    // Attach online flag and sort: online members first
+    const members = profiles
+      .map((p) => ({ ...p, isOnline: onlineSet.has(p.id) }))
+      .sort((a, b) => Number(b.isOnline) - Number(a.isOnline));
+
+    res.json({ members });
   } catch (err) {
     console.error("[Rooms] Get members error:", err);
     res.status(500).json({ error: "Failed to fetch members" });
