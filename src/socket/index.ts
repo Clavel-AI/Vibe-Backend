@@ -2,6 +2,7 @@ import { Server as HttpServer } from "http";
 import { Server, Socket } from "socket.io";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "../config/env";
+import { redis } from "../config/redis";
 import { registerChatHandlers } from "../modules/chat/chat.handler";
 import { registerDmHandlers } from "../modules/dm/dm.handler";
 
@@ -13,19 +14,19 @@ export interface AuthenticatedSocket extends Socket {
   userId?: string;
 }
 
-// In-memory: roomId → Set of userIds currently viewing the room
-const roomMembers = new Map<string, Set<string>>();
+const PRESENCE_TTL = 86400; // 24h safety expiry on presence keys
+
+export async function getRoomMemberCount(roomId: string): Promise<number> {
+  return (await redis.scard(`room:presence:${roomId}`)) ?? 0;
+}
+
+export async function getRoomMembers(roomId: string): Promise<Set<string>> {
+  const members = await redis.smembers(`room:presence:${roomId}`);
+  return new Set(members as string[]);
+}
 
 let ioInstance: Server | null = null;
 export function getIO(): Server | null { return ioInstance; }
-
-export function getRoomMemberCount(roomId: string): number {
-  return roomMembers.get(roomId)?.size ?? 0;
-}
-
-export function getRoomMembers(roomId: string): Set<string> {
-  return roomMembers.get(roomId) ?? new Set();
-}
 
 export function setupSocketIO(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
@@ -62,32 +63,34 @@ export function setupSocketIO(httpServer: HttpServer): Server {
 
     // ─── Room Presence ───
 
-    // room:join = real-time presence only (user is viewing the room now)
-    socket.on("room:join", ({ roomId }: { roomId: string }) => {
+    socket.on("room:join", async ({ roomId }: { roomId: string }) => {
       socket.join(`room:${roomId}`);
-      if (!roomMembers.has(roomId)) roomMembers.set(roomId, new Set());
-      roomMembers.get(roomId)!.add(userId);
-      const count = getRoomMemberCount(roomId);
-      // Broadcast to ALL clients so the home screen list updates in real-time
+      await redis.sadd(`room:presence:${roomId}`, userId);
+      await redis.sadd(`user:rooms:${userId}`, roomId);
+      await redis.expire(`room:presence:${roomId}`, PRESENCE_TTL);
+      await redis.expire(`user:rooms:${userId}`, PRESENCE_TTL);
+      const count = await getRoomMemberCount(roomId);
       io.emit("room:count", { roomId, count });
     });
 
-    // room:leave = user closed the room screen (real-time presence only)
-    socket.on("room:leave", ({ roomId }: { roomId: string }) => {
+    socket.on("room:leave", async ({ roomId }: { roomId: string }) => {
       socket.leave(`room:${roomId}`);
-      roomMembers.get(roomId)?.delete(userId);
-      const count = getRoomMemberCount(roomId);
+      await redis.srem(`room:presence:${roomId}`, userId);
+      await redis.srem(`user:rooms:${userId}`, roomId);
+      const count = await getRoomMemberCount(roomId);
       io.emit("room:count", { roomId, count });
     });
 
-    socket.on("disconnect", () => {
-      roomMembers.forEach((members, roomId) => {
-        if (members.has(userId)) {
-          members.delete(userId);
-          const count = members.size;
+    socket.on("disconnect", async () => {
+      const rooms = await redis.smembers(`user:rooms:${userId}`) as string[];
+      await Promise.all(
+        rooms.map(async (roomId) => {
+          await redis.srem(`room:presence:${roomId}`, userId);
+          const count = await getRoomMemberCount(roomId);
           io.emit("room:count", { roomId, count });
-        }
-      });
+        })
+      );
+      await redis.del(`user:rooms:${userId}`);
       console.log(`[Socket] Disconnected: ${userId}`);
     });
 

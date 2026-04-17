@@ -63,3 +63,7 @@ export async function updateProfile(
     },
   });
 }
+
+export async function deleteAccount(userId: string): Promise<void> {
+  await prisma.profile.delete({ where: { id: userId } });
+}

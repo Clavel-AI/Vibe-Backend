@@ -38,4 +38,7 @@ router.put(
   authController.updateProfile
 );
 
+// DELETE /api/auth/account — permanently delete account
+router.delete("/account", authMiddleware, authController.deleteAccount);
+
 export default router;

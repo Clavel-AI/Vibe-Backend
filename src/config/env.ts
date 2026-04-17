@@ -7,6 +7,7 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL!,
   supabaseUrl: process.env.SUPABASE_URL!,
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  redisUrl: process.env.REDIS_URL || "redis://localhost:6379",
+  upstashRedisRestUrl: process.env.UPSTASH_REDIS_REST_URL!,
+  upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN!,
   corsOrigin: process.env.CORS_ORIGIN || "*",
 } as const;

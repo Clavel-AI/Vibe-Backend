@@ -97,3 +97,14 @@ export async function unblockUser(req: AuthRequest, res: Response) {
     res.status(500).json({ error: "Failed to unblock user" });
   }
 }
+
+// GET /api/users/blocked
+export async function getBlockedUsers(req: AuthRequest, res: Response) {
+  try {
+    const users = await dmService.getBlockedUsers(req.userId!);
+    res.json({ users });
+  } catch (err) {
+    console.error("[DM] getBlockedUsers error:", err);
+    res.status(500).json({ error: "Failed to fetch blocked users" });
+  }
+}

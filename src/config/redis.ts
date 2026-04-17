@@ -1,15 +1,7 @@
-import Redis from "ioredis";
+import { Redis } from "@upstash/redis";
 import { env } from "./env";
 
-export const redis = new Redis(env.redisUrl, {
-  maxRetriesPerRequest: 3,
-  lazyConnect: true,
-});
-
-redis.on("error", (err) => {
-  console.error("[Redis] Connection error:", err.message);
-});
-
-redis.on("connect", () => {
-  console.log("[Redis] Connected");
+export const redis = new Redis({
+  url: env.upstashRedisRestUrl,
+  token: env.upstashRedisRestToken,
 });

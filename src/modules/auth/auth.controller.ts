@@ -51,3 +51,14 @@ export async function updateProfile(req: AuthRequest, res: Response) {
     res.status(500).json({ error: "Failed to update profile" });
   }
 }
+
+// DELETE /api/auth/account
+export async function deleteAccount(req: AuthRequest, res: Response) {
+  try {
+    await authService.deleteAccount(req.userId!);
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error("[Auth] Delete account error:", err);
+    res.status(500).json({ error: "Failed to delete account" });
+  }
+}

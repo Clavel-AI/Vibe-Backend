@@ -294,3 +294,18 @@ export async function blockUser(blockerId: string, blockedId: string): Promise<v
 export async function unblockUser(blockerId: string, blockedId: string): Promise<void> {
   await prisma.block.deleteMany({ where: { blockerId, blockedId } });
 }
+
+export async function getBlockedUsers(
+  blockerId: string
+): Promise<{ id: string; name: string | null; handle: string; avatarUrl: string | null }[]> {
+  const blocks = await prisma.block.findMany({
+    where: { blockerId },
+    select: { blockedId: true },
+  });
+  if (blocks.length === 0) return [];
+  const ids = blocks.map((b) => b.blockedId);
+  return prisma.profile.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, handle: true, avatarUrl: true },
+  });
+}

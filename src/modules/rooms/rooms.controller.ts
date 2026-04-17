@@ -103,7 +103,7 @@ export async function getRoomMessages(req: AuthRequest, res: Response) {
 export async function getRoomMembersHandler(req: AuthRequest, res: Response) {
   try {
     const id = req.params.id as string;
-    const onlineSet = getRoomMembers(id);
+    const onlineSet = await getRoomMembers(id);
 
     // All persistent members of this room
     const roomMemberRecords = await prisma.roomMember.findMany({

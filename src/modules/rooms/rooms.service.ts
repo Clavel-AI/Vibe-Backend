@@ -15,9 +15,10 @@ export async function getRooms() {
   const rooms = await prisma.room.findMany({
     orderBy: { lastActivityAt: "desc" },
   });
-  return rooms.map((room) => ({
+  const memberCounts = await Promise.all(rooms.map((r) => getRoomMemberCount(r.id)));
+  return rooms.map((room, i) => ({
     ...room,
-    memberCount: getRoomMemberCount(room.id),
+    memberCount: memberCounts[i],
     activityStatus: getActivityStatus(room.lastActivityAt),
   }));
 }
@@ -26,17 +27,18 @@ export async function getRoomById(id: string, userId?: string) {
   const room = await prisma.room.findUnique({ where: { id } });
   if (!room) return null;
 
-  const isMember = userId
-    ? !!(await prisma.roomMember.findUnique({
-        where: { roomId_userId: { roomId: id, userId } },
-      }))
-    : false;
+  const [isMemberResult, memberCount] = await Promise.all([
+    userId
+      ? prisma.roomMember.findUnique({ where: { roomId_userId: { roomId: id, userId } } })
+      : Promise.resolve(null),
+    getRoomMemberCount(id),
+  ]);
 
   return {
     ...room,
-    memberCount: getRoomMemberCount(room.id),
+    memberCount,
     activityStatus: getActivityStatus(room.lastActivityAt),
-    isMember,
+    isMember: !!isMemberResult,
   };
 }
 
